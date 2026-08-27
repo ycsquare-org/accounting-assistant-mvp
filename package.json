@@ -1,0 +1,14 @@
+{
+  "name": "bookkeeping-assistant-20260824-001",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "加拿大小企业收据识别与 GST/HST 记账 MVP",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "check": "node --check app.js && node --check receipt-parser.js && node --check tax-calculations.js && node scripts/verify.mjs && node scripts/verify-tax.mjs && node scripts/verify-receipt-parser.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

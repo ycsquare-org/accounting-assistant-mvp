@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="记账助手帮助加拿大小企业识别收据、核对 GST/HST、分类费用并导出记账记录。"
+    />
+    <meta name="theme-color" content="#f5f7f4" />
+    <title>记账助手｜收据识别与 GST 整理</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script defer src="receipt-parser.js"></script>
+    <script defer src="tax-calculations.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="记账助手首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" role="img">
+            <path d="M9 5.5h10.5L24 10v16.5H9z" />
+            <path d="M19.5 5.5V10H24M12.5 15h8M12.5 19h8M12.5 23h5" />
+          </svg>
+        </span>
+        <span>记账助手</span>
+      </a>
+      <nav class="top-nav" aria-label="主要导航">
+        <a href="#upload">处理收据</a>
+        <a href="#records">记账记录</a>
+      </nav>
+      <div class="privacy-pill" title="收据和记录不会上传到我们的服务器">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5.5 8V6.5a4.5 4.5 0 019 0V8M4 8h12v9H4z" />
+        </svg>
+        仅存此浏览器
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> 为加拿大个体经营者设计</p>
+          <h1 id="hero-title">一张收据，<br /><em>变成一笔清楚的账。</em></h1>
+          <p class="hero-description">
+            上传收据，自动提取商家、日期、金额与 GST/HST，并给出费用分类建议。你只需核对，然后保存。
+          </p>
+          <ol class="flow-list" aria-label="处理步骤">
+            <li><span>1</span> 上传收据</li>
+            <li><span>2</span> 核对结果</li>
+            <li><span>3</span> 保存导出</li>
+          </ol>
+        </div>
+
+        <div class="upload-shell" id="upload">
+          <div class="upload-heading">
+            <div>
+              <p class="section-kicker">新建记录</p>
+              <h2>上传一张收据</h2>
+            </div>
+            <span class="free-label">无需登录</span>
+          </div>
+
+          <div
+            class="drop-zone"
+            id="dropZone"
+            role="button"
+            tabindex="0"
+            aria-describedby="uploadHelp"
+          >
+            <input
+              id="receiptInput"
+              class="visually-hidden"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+              aria-label="选择收据图片"
+            />
+            <div class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32">
+                <path d="M8.5 7.5h15v17h-15zM12 13l4-4 4 4M16 9v10M12 21h8" />
+              </svg>
+            </div>
+            <h3>把收据拖到这里</h3>
+            <p>或点击选择手机、电脑中的图片</p>
+            <span class="choose-button" aria-hidden="true">选择收据</span>
+          </div>
+          <div class="upload-meta" id="uploadHelp">
+            <span>JPG、PNG、WebP、HEIC · 最大 10 MB</span>
+            <span>图片仅在设备上处理</span>
+          </div>
+          <div class="demo-row">
+            <span>第一次使用？</span>
+            <button class="text-button" id="demoButton" type="button">
+              试用示例收据
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M9 4l4 4-4 4" /></svg>
+            </button>
+          </div>
+
+          <div class="analyzing-panel" id="analyzingPanel" hidden aria-live="polite">
+            <div class="scan-preview">
+              <img id="scanPreview" alt="正在识别的收据预览" />
+              <div class="scan-line" aria-hidden="true"></div>
+            </div>
+            <div class="analysis-copy">
+              <div class="analysis-status-icon" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
+              <div>
+                <p class="section-kicker">正在读取</p>
+                <h3 id="analysisStatus">正在检查收据内容…</h3>
+              </div>
+            </div>
+            <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+            <p class="progress-caption"><span id="progressLabel">准备图片</span><strong id="progressValue">10%</strong></p>
+          </div>
+
+          <div class="inline-alert error" id="uploadError" hidden role="alert">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l7 13H3zM10 7v4M10 14h.01" /></svg>
+            <span></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="review-section" id="review" hidden aria-labelledby="review-title">
+        <div class="section-heading review-heading">
+          <div>
+            <p class="eyebrow"><span></span> 识别完成</p>
+            <h2 id="review-title">请核对这笔费用</h2>
+            <p>已自动填写可识别的内容。低把握字段会提示你重点检查。</p>
+          </div>
+          <button class="secondary-button" id="newReceiptButton" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+            处理下一张
+          </button>
+        </div>
+
+        <div class="review-grid">
+          <aside class="receipt-card" aria-label="收据预览">
+            <div class="card-bar">
+              <span>收据原图</span>
+              <button class="icon-button" id="rotateButton" type="button" aria-label="旋转收据图片" title="旋转图片">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 7A6 6 0 115 5.5M5 2v3.5h3.5" /></svg>
+              </button>
+            </div>
+            <div class="receipt-image-wrap">
+              <img id="receiptPreview" alt="已上传的收据" />
+            </div>
+            <div class="file-details">
+              <span id="fileName">receipt.jpg</span>
+              <span id="fileSize">1.2 MB</span>
+            </div>
+          </aside>
+
+          <form class="editor-card" id="recordForm" novalidate>
+            <div class="editor-status">
+              <div>
+                <span class="confidence-badge" id="confidenceBadge">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8l3 3 7-7" /></svg>
+                  已提取 5 项
+                </span>
+                <h3>费用信息</h3>
+              </div>
+              <button class="copy-button" id="copyButton" type="button">
+                <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M6 5V3h9v9h-2M3 6h9v9H3z" /></svg>
+                复制结果
+              </button>
+            </div>
+
+            <div class="recognition-note" id="recognitionNote">
+              <span aria-hidden="true">✦</span>
+              <p><strong>分类建议：</strong><span id="suggestionText">根据商家和收据明细自动判断。</span></p>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field field-wide" data-field="merchant">
+                <div class="label-row">
+                  <label for="merchant">商家名称</label>
+                  <span class="field-confidence" id="merchantConfidence">识别把握高</span>
+                </div>
+                <input id="merchant" name="merchant" type="text" autocomplete="organization" required maxlength="100" />
+                <p class="field-error" id="merchantError"></p>
+              </div>
+
+              <div class="form-field" data-field="date">
+                <div class="label-row">
+                  <label for="date">交易日期</label>
+                  <span class="field-confidence" id="dateConfidence">识别把握高</span>
+                </div>
+                <input id="date" name="date" type="date" required />
+                <p class="field-error" id="dateError"></p>
+              </div>
+
+              <div class="form-field" data-field="category">
+                <div class="label-row">
+                  <label for="category">费用分类</label>
+                  <span class="ai-label">AI 建议</span>
+                </div>
+                <div class="select-wrap">
+                  <select id="category" name="category" required>
+                    <option value="">请选择分类</option>
+                    <option>办公用品</option>
+                    <option>餐饮与招待</option>
+                    <option>软件与订阅</option>
+                    <option>车辆费用</option>
+                    <option>差旅</option>
+                    <option>广告与推广</option>
+                    <option>通讯</option>
+                    <option>专业服务</option>
+                    <option>租金与水电</option>
+                    <option>销售成本</option>
+                    <option>银行手续费</option>
+                    <option>其他／待分类</option>
+                  </select>
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
+                </div>
+                <p class="field-error" id="categoryError"></p>
+              </div>
+
+              <div class="form-field" data-field="total">
+                <div class="label-row">
+                  <label for="total">含税总额</label>
+                  <span class="field-confidence" id="totalConfidence">识别把握高</span>
+                </div>
+                <div class="money-input"><span>$</span><input id="total" name="total" type="number" inputmode="decimal" min="0.01" max="9999999" step="0.01" required /></div>
+                <p class="field-error" id="totalError"></p>
+              </div>
+
+              <div class="form-field" data-field="taxAmount">
+                <div class="label-row">
+                  <label for="taxAmount" id="gstHstLabel">GST/HST 税额</label>
+                  <span class="field-confidence" id="taxConfidence">识别把握高</span>
+                </div>
+                <div class="money-input"><span>$</span><input id="taxAmount" name="taxAmount" type="number" inputmode="decimal" min="0" max="9999999" step="0.01" required /></div>
+                <p class="field-error" id="taxAmountError"></p>
+              </div>
+
+              <div class="form-field" id="pstField" data-field="pstAmount" hidden>
+                <div class="label-row">
+                  <label for="pstAmount">PST 税额</label>
+                  <span class="field-confidence" id="pstConfidence">识别把握高</span>
+                </div>
+                <div class="money-input"><span>$</span><input id="pstAmount" name="pstAmount" type="number" inputmode="decimal" min="0" max="9999999" step="0.01" /></div>
+                <p class="field-error" id="pstAmountError"></p>
+              </div>
+
+              <div class="form-field">
+                <label for="taxType">税种判断</label>
+                <div class="select-wrap">
+                  <select id="taxType" name="taxType">
+                    <option>HST</option>
+                    <option>GST</option>
+                    <option>GST + PST</option>
+                    <option>未收税</option>
+                    <option>待确认</option>
+                  </select>
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
+                </div>
+              </div>
+
+              <div class="form-field subtotal-field">
+                <span class="field-label">总税额</span>
+                <output id="totalTax" for="taxAmount pstAmount taxType">$0.00</output>
+              </div>
+
+              <div class="form-field subtotal-field">
+                <span class="field-label">税前金额</span>
+                <output id="subtotal" for="total taxAmount pstAmount taxType">$0.00</output>
+              </div>
+
+              <div class="form-field field-wide">
+                <label for="notes">备注 <span class="optional">选填</span></label>
+                <input id="notes" name="notes" type="text" maxlength="160" placeholder="例如：客户会议用品" />
+              </div>
+            </div>
+
+            <div class="tax-hint">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17a7 7 0 100-14 7 7 0 000 14zM10 9v4M10 6.5h.01" /></svg>
+              请核对税种及税额；是否可申报进项税抵免（ITC）取决于实际业务用途。
+            </div>
+
+            <div class="form-actions">
+              <button class="primary-button" type="submit">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h10l2 2v12H4zM7 3v5h6V3M7 17v-5h6v5" /></svg>
+                保存这笔记录
+              </button>
+              <p>保存后仍可从记录列表中删除</p>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="records-section" id="records" aria-labelledby="records-title">
+        <div class="section-heading records-heading">
+          <div>
+            <p class="section-kicker">本地账簿</p>
+            <h2 id="records-title">记账记录 <span id="recordCount">0</span></h2>
+            <p>记录只保存在此浏览器。导出后可交给会计或继续在表格中整理。</p>
+          </div>
+          <div class="export-actions">
+            <button class="secondary-button" id="csvButton" type="button">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12" /></svg>
+              导出 CSV
+            </button>
+            <button class="primary-button compact" id="excelButton" type="button">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12" /></svg>
+              导出 Excel
+            </button>
+          </div>
+        </div>
+
+        <div class="records-card">
+          <div class="empty-records" id="emptyRecords">
+            <div class="empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32"><path d="M8 5h12l4 4v18H8zM20 5v4h4M12 15h8M12 19h8" /></svg>
+            </div>
+            <h3>还没有记账记录</h3>
+            <p>上传第一张收据并核对保存后，记录会出现在这里。</p>
+            <a class="inline-link" href="#upload">去上传收据 <span aria-hidden="true">↑</span></a>
+          </div>
+
+          <div class="table-wrap" id="recordsTableWrap" hidden>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">日期</th>
+                  <th scope="col">商家</th>
+                  <th scope="col">费用分类</th>
+                  <th scope="col" class="amount-cell">税前金额</th>
+                  <th scope="col" class="amount-cell">总税额</th>
+                  <th scope="col" class="amount-cell">总额</th>
+                  <th scope="col"><span class="visually-hidden">操作</span></th>
+                </tr>
+              </thead>
+              <tbody id="recordsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="brand footer-brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M9 5.5h10.5L24 10v16.5H9z" /><path d="M19.5 5.5V10H24M12.5 15h8M12.5 19h8M12.5 23h5" /></svg>
+        </span>
+        <span>记账助手</span>
+      </div>
+      <p>让每一张收据，都有清楚的去处。</p>
+      <p class="project-number">项目 20260824-001 · 加拿大 GST/HST 记账 MVP</p>
+    </footer>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+    <div class="sr-status visually-hidden" id="srStatus" role="status" aria-live="polite"></div>
+  </body>
+</html>
